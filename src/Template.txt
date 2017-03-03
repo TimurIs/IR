@@ -1,0 +1,59 @@
+\documentclass[a4paper,12pt,titlepage,final]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{authblk}
+\renewcommand{\baselinestretch}{1.5} % полуторный интервал между строками
+
+\begin{document}
+
+\begin{titlepage}
+    \begin{center}
+	{\small \sc Information Retrieval\\
+	\\}
+	\vfill
+	{\Large Project}
+    \end{center}
+    \begin{flushright}
+	\vfill {Performed by:\\
+	Nataliya Zozulya\\
+	Timur Isaev\\
+	~\\
+	Professor:\\
+	Nada Naji}
+    \end{flushright}
+    \begin{center}
+	\vfill
+	{\small Spring semester, 2016}
+    \end{center}
+\end{titlepage}
+
+\setcounter{page}{2}
+
+\section{Introduction}
+
+The cite example~\cite{1}
+\newline
+bla bla BLA
+
+\newpage
+
+\section{Solutions Overview}
+
+\newpage
+
+\section{Implementation}
+
+\newpage
+
+\section{Results}
+
+\newpage
+
+\section{Conclusion}
+
+\newpage
+
+\begin{thebibliography}{99}
+
+\bibitem{1}J. Grossman, R. Hansen, P. Petkov, A. Rager. XSS Attacks. Cross Site Scripting Exploits and Defence. Syngress Publishing, Inc. 2007 %Example
+
+\end{document}

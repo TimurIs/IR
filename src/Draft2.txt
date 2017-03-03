@@ -1,0 +1,189 @@
+\documentclass[a4paper,12pt,titlepage,final]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{authblk}
+\usepackage{mathtools}
+\renewcommand{\baselinestretch}{1.5} % полуторный интервал между строками
+
+\begin{document}
+
+\begin{titlepage}
+    \begin{center}
+	{\small \sc Information Retrieval\\}
+	\vfill
+	{\Large Project}
+    \end{center}
+    \begin{flushright}
+	\vfill {Performed by:\\
+	Nataliya Zozulya\\
+	Timur Isaev\\
+	~\\
+	Professor:\\
+	Nada Naji}
+    \end{flushright}
+    \begin{center}
+	\vfill
+	{\small Spring semester, 2016}
+    \end{center}
+\end{titlepage}
+
+\setcounter{page}{2}
+
+\section{Introduction}
+
+\subsection{Project Overview} 
+The goal of this project is to compare different techniques and approaches of retrieving and ranking documents for the given query. To accomplish this, three different ranking functions - namely the Okapi BM25~\cite{2}, TF-IDF~\cite{3} and the Lucene~\cite{4} basic search function - were used on the CACM~\cite{1} test collection. In addition to that, the query expansion and stop words techniques were used together with the TF-IDF function to check whether those techniques improve the search results.
+\newline
+\newline
+In order to compare the effectiveness of different searching methods such metrics as precision, recall, reciprocal rank~\cite{5} and their average values were used.
+\newline
+\newline
+As an additional side task the way to create snippets with the highlighted text using the Lucene library was implemented in this project. To achieve this the documentation provided by the Lucene creators was carefully studied. As a result, for each query that is handled by Lucene a file containing the snippets is generated. 
+\newline
+\subsection{Contribution}
+All of the projects tasks and each part of the documentation writing were divided between the team members. 
+\newline
+\newline
+\newline
+Cleaning the given data corpus, creating the inverted index of the corpus, BM25 and TF-IDF functions, query expansion using the inflectional variants, adding the stopping to the TF-IDF run and the "precision at k" were implemented by Nataliya Zozulya.
+\newline
+\newline
+The searcher that uses Lucene with the highlighting, query expansion using the pseudo-relevance feedback, the computation of the precision, recall, reciprocal rank and their means were implemented by Timur Isaev. 
+
+\newpage
+
+\section{Solutions Overview}
+This project implements two different query expansion techniques. The first one uses the Rocchio Algorithm in order to perform the pseudo-relevance feedback expansion. The second one uses the Standford NLP parser to expand the query using the inflectional variants.	
+\subsection{Rocchio Algorithm and Pseudo-Relevance Feedback}
+The Rocchio Algorithm is an algorithm that uses the Vector Space model of the document representation in order to compute the new query vector~\cite{6}. This algorithm is based on a assumption that the information about the relevance of the documents is known. It tries to boost the query vector closer to the relevant set of the documents and to postpone it from the non-relevant set~\cite{6}.
+\newline
+\newline
+The formula of the Rocchio algorithm is as follows~\cite{2}:
+
+$q_i^{'} = \alpha q_i + \beta {1 \over |Rel|} \displaystyle\sum_{D_i \in |Rel|} d_{ij} + \gamma {1 \over |NonRel|} \displaystyle\sum_{D_i \in |NonRel|} d_{ij}$
+\newline
+\newline
+where $q_j$ is the initial weight of query term $j$, $Rel$ is the set of identified relevant documents, $NonRel$ is the set of non-relevant documents. $|Rel|$ and $|NonRel|$ is the power of the $Rel$ and $NonRel$ sets respectively. $d_{ij}$ is the weight of the $j$th term in document $i$, and $\alpha$, $\beta$, and $\gamma$ are parameters that control the effect of each component.
+\newline
+\newline
+This algorithm is often used in the Relevance Feedback. In this approach the user, who submitted the query, selects manually the relevant set of documents by observing the initial search results. After that, the search is performed once again over a new query, that was returned by the Rocchio algorithm~\cite{2}.
+\newline
+\newline
+In Pseudo-Relevance Feedback, however, the user does not interact with the search engine. Instead, the top $k$ of the returned ranked documents are assumed to be relevant. All other documents from the collection usually assumed to be non-relevant~\cite{2}. Using this method, it is easy to adjust the Rocchio algorithm for the Pseudo-Relevance Feedback. 
+\subsection{Query expansion - Inflectional variants}
+
+As the second query expansion technique we chose to expand the base query with the inflectional variants of the query words. We implemented this approach using Stanford CoreNLP suite \cite{8} :
+\newline
+\newline
+Phase 1
+\newline
+When indexing the corpus we additionally process each document by the suite's lemmatizer. For each token in the given text its lemma is retrieved and this information is stored in the inverse map, where lemma is the key and the corresponding variants from the text are the value. Thus we store all the inflectional variants that are present in the corpus and only those variants that are present.
+\newline
+\newline
+Phase 2
+\newline
+During the search process, lemma is retrieved for each term in the query and searched for in the map generated in Phase 1. The inflectional variants of the query term from the found mapping are then added to the query.
+\newpage
+
+\section{Implementation}
+\subsection{Functionality}
+The main project class Searcher implements the workflow needed to execute all required runs and perform evaluation on them, as well as any preparational operations. All distinct operation, such as indexing, evaluating, searching with a retrieval model, are implemented in separate classes and can be combined in a different workflow, if such need arises. The current workflow is as follows:
+\newline
+\newline
+\textbf{Corpus cleaning}.
+The main corpus is processed by the \emph{CorpusCleaner}, which removes tables with the numbers and any html tags, and stores the cleaned files in the separated folder.
+\newline
+\newline
+\textbf{Indexing}.
+The cleaned corpus is further processed by the Indexer, that
+\begin{enumerate} 
+\item Reads text from the file and removes punctuation for indexing purposes. The modifications to the input corpus are not 
+\item Tokenizes the text, creates unigram index and performs lemmatization of the tokens
+\item Gathers statistical information, such as document frequency, number of tokens in each document
+\item Index, lemmatizer output and statistics are stored in a dedicated folder
+\end{enumerate}
+\newline
+\textbf{Searching}.
+The three main search classes are BM25Retriever, LuceneSearcher and TFIDFRetriever. The main auxiliary classes that implement "flavours" that can be added to the search process are StopWordRemover, InflectionalQueryExpander and PRQueryExpander.
+\newline
+\newline
+\emph{BM25Retriever} uses the unmodified BM25 formula~\cite{2} and we assume that relevance information is not present, using judgements for evaluation only.  \emph{TFIDFRetriever} uses calculates the cosine similarity as a dot product of document and query vectors (cosine measure normalization is incorporated in the document/query weights).
+\newline
+\newline
+\emph{LuceneSearcher} is using the Apache Lucene open-source informational retrieval software library~\cite{7}. It uses the Lucene \emph{SimpleAnalyzer} to create the inverted index for the given corpus. It uses standard provided classes, such as \emph{IndexSearcher}, \emph{TopScoreDocCollector}, \emph{QueryScorer} and others to perform the search for a given query. In addition to that, for the each query the \emph{QueryScorer} is set to compute the score of the given multi-term query. The \emph{QueryScorer} is then used in the \emph{Highlighter} to generate snippets with the highlighted words in them. The \emph{Highlighter} is set to analyze maximum $2^{32} - 1$ chars in the given file. As a result, for each ranked document a snippet that contains from 1 to 3 best text fragments is generated and the list of snippets is saved in a different file.   
+\newline
+\newline
+\emph{StopWordRemover} loads the stopwords from the given file and when called from any searcher class and given a string as a parameter it removes all stopwords from a given string. We use only query-time stopping, thus preserving the corpus as is, and call this functionality from TFIDFRetriever and LuceneSearcher for the specific runs. The decision on whether to stop the query is governed by boolean configuration parameter passed to the searcher.
+\newline
+\newline
+\emph{InflectionalQueryExpander's} functionality is called from Indexer and TFIDFRetriever. For detailed description, see the  Solutions Overview section.
+\newline
+\newline
+\emph{PRQueryExpander} is using the Rocchio algorithm, as described in the section \textbf{2.1}, to perform the pseudo-relevance feedback. In our implementation we assume, that the top $k = 3$ documents from the first search represent the set of the relevant documents. The parameter $k$ was chosen empirically. For the $\alpha$, $\beta$ and $\gamma$ parameters we chose the most common~\cite{9} values of $1$, $0.75$ and $0.15$ respectfully.   
+
+\subsection{Query-by-query analysis}
+
+\newpage
+
+\section{Results}
+In the table below we present the evaluation summary of the conducted runs:
+
+\begin{center}
+ \begin{tabular}{|l c c c c|} 
+ \hline
+ Run & MAP & MRR & MP at K=5 & MP at K=20 \\ [0.5ex] 
+ \hline\hline
+ BM25 base & 0.32603 & 0.49663 & 0.3 & 0.16731 \\ 
+ \hline
+ TFIDF base & 0.34548 & 0.56107 & 0.33077 & 0.17596 \\
+ \hline
+ Lucene base &  0.42513 & 0.71978 & 0.37692 & 0.20673 \\
+ \hline
+ TFIDF\_InfExp* &  0.35296 & 0.59755 & 0.31538 & 0.19327 \\
+  \hline
+ TFIDF\_PRExp* &  0.29209 & 0.44733 & 0.25769 & 0.17885 \\
+  \hline
+ TFIDF with stopping &  0.43744 & 0.70042 & 0.41538 & 0.21827  \\
+   \hline
+ Lucene with stopping & 0.45001 & 0.71484 & 0.39231 & 0.22981 \\ [1ex] 
+ \hline
+\end{tabular}
+\end{center}
+\begin{center} Table 1. Evaluation summary.\end{center}
+\noindent TFIDF\_InfExp* - TFIDF with query expansion (inflectional variants);
+
+\noindent TFIDF\_PRExp* - TFIDF with pseudo-relevance feedback query expansion
+\newpage
+
+\section{Conclusion}
+
+\subsection{Results Analysis}
+
+\subsection{Further work}
+
+\newpage
+
+\begin{thebibliography}{99}
+
+\bibitem{1} CACM
+
+\bibitem{2}  W. Bruce Croft, Donald Metzler, Trevor Strohman: Search Engines: Information Retrieval in Practice. Pearson Education, Inc., 2015
+
+\bibitem{3} TF-IDF
+
+\bibitem{4} Lucene 
+
+\bibitem{5} Precision Recall Rank
+
+\bibitem{6}J.  Christopher D. Manning, Prabhakar Raghavan, Hinrich Sch?tze: An Introduction to Information Retrieval. Cambridge University Press, 2009.
+
+\bibitem{7} https://lucene.apache.org/
+
+\bibitem{8} http://stanfordnlp.github.io/CoreNLP/
+
+\bibitem{9} Jordan C., Watters C: Extending the Rocchio Relevance Feedback Algorithm to Provide Contextual Retrieval. Dalhousie University, Faculty of Computer Science.
+
+
+\newpage
+\tableofcontents
+
+\end{document}

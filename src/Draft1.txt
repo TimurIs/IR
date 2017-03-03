@@ -1,0 +1,254 @@
+\documentclass[a4paper,12pt,titlepage,final]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{authblk}
+\usepackage{mathtools}
+\usepackage{url}
+\usepackage{geometry}
+ \geometry{
+ a4paper,
+ total={170mm,257mm},
+ left=20mm,
+ top=20mm,
+ }
+\renewcommand{\baselinestretch}{1.5} % полуторный интервал между строками
+
+\begin{document}
+
+\begin{titlepage}
+    \begin{center}
+	{\Large \sc Information Retrieval\\}
+	\vfill
+	{\Large Project}
+    \end{center}
+    \begin{flushright}
+	\vfill {Performed by:\\
+	Nataliya Zozulya\\
+	Timur Isaev\\
+	~\\
+	Professor:\\
+	Nada Naji}
+    \end{flushright}
+    \begin{center}
+	\vfill
+	{\small Spring semester, 2016}
+    \end{center}
+\end{titlepage}
+
+\setcounter{page}{2}
+
+\section{Introduction}
+
+\subsection{Project Overview}
+
+
+The goal of this project is to compare effectiveness of different retrieval models either used standalone or combined with auxiliary techniques and approaches. 
+
+To accomplish this, three different models - namely the Okapi BM25~\cite{1}, TF-IDF~\cite{1} and the Lucene~\cite{2} default retrieval model - were used on the CACM test collection. In addition to that, query expansion techniques and stopping were used with the TF-IDF retrieval model to evaluate the impact of those on its effectiveness.
+
+In order to compare the performance of different searching methods such metrics as precision, recall, reciprocal rank~\cite{3} and their average values were used.
+
+We also implemented snippet generation with query term highlighting using the Lucene library.
+
+\subsection{Contribution}
+We performed task breakdown and divided them between the team members in the following way:
+
+Cleaning the given data corpus, creating the inverted index of the corpus, BM25 and TF-IDF searchers, query expansion using the inflectional variants, adding the stopping to the TF-IDF run and the "precision at k" were implemented by Nataliya Zozulya.
+
+The Lucene searcher with the highlighting, query expansion using the pseudo-relevance feedback, the computation of the precision, recall, reciprocal rank and their means were implemented by Timur Isaev. 
+
+Code review, component integration and documentation were done together.
+
+\section{Solutions Overview}
+This project implements two different query expansion techniques:
+\begin{itemize}
+\item Pseudo-relevance feedback expansion using the Rocchio Algorithm~\cite{3}
+\item Expansion with inflectional variants using the Standford Core NLP parser~\cite{4}
+\end{itemize}
+
+\subsection{Rocchio Algorithm and Pseudo-Relevance Feedback}
+The Rocchio Algorithm is an algorithm that uses the Vector Space model of the document representation in order to compute the new query vector. This algorithm is based on the assumption that the information about the relevance of the documents is known. It tries to bring the query vector closer to the set of the relevant documents and to move it further from the non-relevant set~\cite{3}.
+\newline
+\newline
+The formula of the Rocchio algorithm is as follows~\cite{3}:
+
+\begin{center}
+$q_i^{'} = \alpha q_i + \beta {1 \over |Rel|} \displaystyle\sum_{D_i \in |Rel|} d_{ij} + \gamma {1 \over |NonRel|} \displaystyle\sum_{D_i \in |NonRel|} d_{ij}$
+\end{center}
+
+where $q_j$ is the initial weight of query term $j$, $Rel$ is the set of identified relevant documents, $NonRel$ is the set of non-relevant documents. $|Rel|$ and $|NonRel|$ is the power of the $Rel$ and $NonRel$ sets respectively. $d_{ij}$ is the weight of the $j$th term in document $i$, and $\alpha$, $\beta$, and $\gamma$ are parameters that control the effect of each component.
+
+This algorithm is often used in query expansion using relevance feedback. In this approach the user, who submitted the query, manually selects the relevant set of the documents by observing the initial search results. After that, the search is performed once again with the new query, that was returned by the Rocchio algorithm, after processing feedback information~\cite{3}.
+
+In pseudo-relevance feedback, however, the user does not interact with the search engine. Instead, the top $k$ of the returned ranked documents are assumed to be relevant. All other documents from the collection usually assumed to be non-relevant~\cite{3}. Using this assumption, the Rocchio algorithm can be adjusted for the usage with the pseudo-relevance feedback. 
+
+\subsection{Query expansion - Inflectional variants}
+
+As the second query expansion technique we chose to expand the base query with the inflectional variants of the certain subset of query words.
+
+We implemented this approach using Stanford CoreNLP suite \cite{4} :
+
+Phase 1
+
+When indexing the corpus we additionally process each document by the suite's lemmatizer. For each token in the given text its lemma is retrieved and this information is stored in the inverse map, where lemma is the key and the corresponding variants from the text are the value. In this way we only store the inflectional variants that are present in the corpus, and won't expand query with variants that exist, but are not present in any of the documents. 
+
+Phase 2
+
+During the search process lemma is retrieved for every term in the query and searched for in the map generated in Phase 1. The inflectional variants of the query term from the found mapping are then added to the query. This is done for all terms, except those that are present in the stopword list provided with the assignment.
+Given that many queries in the test collection are not concise and contain many stopwords we added this to improve effectiveness.
+
+\section{Implementation}
+
+\subsection{Functionality}
+The main project class - Searcher - implements the workflow needed to execute all required runs and perform evaluation on them, as well as any preparational operations. All distinct operations, such as indexing, evaluating, searching with a retrieval model, are implemented in separate classes and can be combined in a different workflow, if such need arises. The current workflow is as follows:
+
+\textbf{Corpus cleaning}.
+The main corpus is processed by the \emph{CorpusCleaner}, which removes tables with the numbers and any html tags, and stores the cleaned files in the dedicated folder.
+
+\textbf{Indexing}. The cleaned corpus is further processed by the \emph{Indexer}, that
+\begin{enumerate} 
+\item Reads text from the file and removes punctuation for indexing purposes (modifications are not saved to the disk)
+\item Tokenizes the text, creates the unigram inverted index and performs lemmatization of the tokens
+\item Gathers statistical information: document frequency, number of tokens per document etc.
+\item Stores index, information collected with lemmatizer and statistics to the dedicated folder
+\end{enumerate}
+
+\textbf{Searching}. The three main search classes are \emph{BM25Retriever}, \emph{LuceneSearcher} and \emph{TFIDFRetriever}. The main auxiliary classes that implement techniques embedded into the search process are \emph{StopWordRemover}, \emph{InflectionalQueryExpander} and \emph{PRQueryExpander}.
+
+\emph{BM25Retriever} uses the unmodified BM25 formula with the $k_1$, $k_2$ and $b$ parameters derived from the IR community numerous experiments (1.2, 100 and 0.75 correspondingly)\cite{1}. We use relevance judgement information available to set $R$ and $r_i$ values.
+
+\emph{TFIDFRetriever} calculates the cosine similarity as a dot product of document and query vectors (cosine measure normalization is incorporated in the document/query weights)~\cite{1}. 
+
+\emph{LuceneSearcher} is using the Apache Lucene open-source informational retrieval software library~\cite{2}: Lucene \emph{SimpleAnalyzer} is provided to the \emph{IndexWriter} configuration; standard classes, such as \emph{IndexSearcher}, \emph{TopScoreDocCollector}, \emph{QueryScorer} etc. are used to perform the search for a given query. The default retrieval model (employed in our implementation) is a customized version TF-IDF model and its formula is as follows~\cite{6}:
+
+\begin{center}
+$score(q,d)= coord(q,d) \cdot queryNorm(q) \cdot \displaystyle\sum_{t \in q} (tf(t \in d)\cdot idf(t)^2 \cdot t.getBoost() \cdot norm(t,d))$
+\end{center}
+where the score of the document is impacted (besides tf and idf) by the total number of the query terms present in the document (coord) and normalized to account for document and query differences.    
+
+In addition to that, for each query the \emph{QueryScorer} is set to compute the score of the given multi-term query. The \emph{QueryScorer} is then used in the \emph{Highlighter} to generate snippets with the highlighted query terms in them. The \emph{Highlighter} is set to analyze maximum $2^{32} - 1$ chars in the given file. As a result, for each ranked document a snippet that contains from 1 to 3 best text fragments is generated and the list of snippets is saved in a dedicated file.   
+
+\emph{StopWordRemover} loads the stopwords from the given file and, when called from any searcher class and given a string as a parameter, it removes all stopwords from it. We use only query-time stopping, thus, preserving the corpus as is, and call this functionality from \emph{TFIDFRetriever} and \emph{LuceneSearcher} for the dedicated runs. The decision on whether to stop the query is governed by boolean configuration parameter passed to the respective searcher.
+
+\emph{InflectionalQueryExpander} functionality is called from \emph{Indexer} and \emph{TFIDFRetriever}. For detailed description, see section \textbf{2.2}.
+
+\emph{PRQueryExpander} is using the Rocchio algorithm, as described in section \textbf{2.1}, to perform query expansion using pseudo-relevance feedback. In our implementation we assume, that the top $k = 3$ documents from the first search represent the set of the relevant documents. We also suppose that only $t = 5$ of words with the highest TF-IDF weight from each document and all terms from the query comprise the considered vocabulary. Each document and query is represented as a vector of the same length, as vocabulary. Each element of the vector represents the weight of the corresponding term from the vocabulary. Parameter $k$ and $t$ were chosen empirically. We performed 9 different runs with $k = 10; 5; 3$ and with $t = 15; 10; 5$. The result analysis of those runs showed, that the best performance is achieved with $k = 3$ and $t = 5$. For the $\alpha$, $\beta$ and $\gamma$ parameters we chose the most common~\cite{5} values of $1$, $0.75$ and $0.15$ correspondingly. 
+
+\subsection{Query-by-query analysis}
+After processing the stemmed corpus with \emph{TFIDFRetriever} we compared the effectiveness for the given query set with the \emph{TFIDFRetriever} base run. Based on this~\cite{7} we chose the following queries for the analysis: \#19, which had good results in the base run and got even slightly better results in the stemmed run, \#23 which had good results, but obtained very bad results in the stemmed run and \#13, where results almost did not change between the runs.
+
+From our observations, stemming has a twofold impact on the results:
+\begin{itemize} 
+\item after stemming, relevant documents and query tend to have more terms in common, in case formulations differed previously
+\item on the other hand this leads to query and non-relevant documents having more common terms, if these documents had the term with the similar stem before and, especially if stem is the same for 2 words somewhat different semantically (e.g. "distribution" and "distributed" are stemmed to one term "distribut" and searched for in conjunction with algorithms).
+\item stemming impacts the document weight function by changing the weight of the terms as compared to non-stemmed versions in 2 ways: 
+(1) term from the query present in the document might lose its weight - if many of the word forms were stemmed, the document frequency of the resulting stem is sometimes significantly higher
+(2) the normalization compound of the formula in the denominator might decrease for the same reason
+\end{itemize} 
+
+We observed all of these effects when doing query-by-query analysis, the detailed results of which are presented next.
+
+\#19 "parallel algorithm" (unstemmed - "parallel algorithms") - This query shows good results for the base run and even better results on average in the stemmed run: perfect precision at K=5, as compared to 0.8 in the unstemmed, slightly improved precision at K=20.
+\begin{itemize}
+\item
+One document (CACM-863) for this query never gets into the top 100 results set as it does not contain a single word from a query, instead it contains the name of the algorithm. Expanding query using ontology/thesaurus could help in this situation.
+\item
+Recall within TOP 100 documents has increased for this query due to both query and corpus stemming. For example, CACM-2664 was included in TOP 100 and even took the 5th rank, after "parallelism" was stemmed to "parallel" in the document.
+\item
+However, the same stemming of "parallelism" in the non-relevant CACM-2785 placed it at the 9th rank, thus pushing the relevant CACM-3156 to the 10th, even though it also gained from stemming (one occurrence of "algorithms" changed to "algorithm"). Corpus statistics shows that "parallel" is a much rarer word than "algorithm", which explains the situation.
+\item
+It is interesting how 2 documents that gained no additional query terms after stemming switched places (CACM-2700 (non-relevant) and CACM-141 (relevant) were at ranks 17 and 16 in the base run, that changed to 17 and 19 correspondingly). This illustrates another effect that stemming has on corpus: it results in reweighing idf parameter. If, say, previously "reduction" and "reductions" were 2 different words, with corresponding idfs, in the stemmed corpus it is one term "reduct" having the cumulative idf of both. This happens to every token and thus impacts the normalization compound of the term weight. In our example, this normalization compound decreased for the CACM-2700 more than for CACM-141 (which contains just a few words), resulting in places switch.
+\end{itemize}
+
+Query \#13 -"code optim for space effici" (unstemmed - "code optimization for space efficiency").
+\begin{itemize}
+ \item Only 2 of 5 query terms where stemmed, while the rest already represented the stem-like versions. 
+ \item Both relevant and non-relevant documents from the top ranks of base run contained the terms that, when stemmed, coincided with the terms of the stemmed query, thus the positions in the top 10 did not change much for the relevant documents. 
+ \item Although through the stemming both relevant and non-relevant documents did obtain additional terms that coincide with the query terms ("optimal", "optimization" to "optim") - the weight of these previously rare terms decreased as they were all cut down to a stem (e.g. 155 optim, 69 - optimization). Because of this CACM-1231 fell in rank significantly.
+ \item a subset of relevant documents for the query contains only a couple (or even zero) of query terms  per document, and these were out of TOP100 in both runs. In this case, as before, expanding query using ontology/thesaurus could help in this situation.
+
+\end{itemize}
+Query \#23 - "distribut comput structur and algorithm" (unstemmed -  "Distributed computing structures and algorithms"). 
+\begin{itemize}
+\item This query had 0.6 precision at K=5 in the base run and R of 1, in the stemmed run all of the relevant documents moved down in their ranks (from the 1st place to 9th, and some moved from the top 5 to 40th and 41st place). In the base run they obtained high ranking as the documents that contained query terms "distributed" and "structure" (relatively rare in the corpus as compared to other query terms; document frequency were 27 and 117). After stemming however the document frequency for the stems of those increased significantly - 119	and 912 respectively, which resulted in rank decrease.
+\end{itemize}
+
+
+\section{Results}
+
+In the table below we present the evaluation summary of the conducted runs:
+
+\begin{center}
+ \begin{tabular}{|l c c |} 
+ \hline
+ Run & MAP & MRR \\ [0.5ex] 
+ \hline\hline
+ BM25 base & 0.53093 & 0.78196 \\ 
+ \hline
+ TFIDF base & 0.34548 & 0.56107 \\
+ \hline
+ Lucene base &  0.42513 & 0.71978 \\
+ \hline
+ TFIDF\_InfExp* &  0.36348 & 0.58961\\
+  \hline
+ TFIDF\_PRExp* &  0.35953 & 0.56709 \\
+  \hline
+ TFIDF with stopping &  0.43744 & 0.70042\\
+   \hline
+ Lucene with stopping & 0.45001 & 0.71484\\ [1ex] 
+ \hline
+\end{tabular}
+\end{center}
+
+\noindent TFIDF\_InfExp* - TFIDF with query expansion (inflectional variants);
+
+\noindent TFIDF\_PRExp* - TFIDF with pseudo-relevance feedback query expansion
+
+
+\section{Conclusion}
+
+The design and effectiveness of the search engine depends on the area it is applied in (e.g. compare engine for web search and corporate document search). In this project we built and compared performance using CACM test collection. The overall observation of the collection shows that: the number of the documents in the corpus is quite small, as well as the sizes of those documents. The test queries are  sometimes unreasonably long and contain a lot of common words unspecific to the topic of the request. In some of the queries user explicitly mentions what terms he/she does not want to see in the results.
+
+Our evaluation shows that BM25, when using relevance information, performs better than any other evaluated run. Before this relevance information was used to calculate the respective probability parameters, BM25 gave in to Lucene-based engine. Thus, some knowledge about the vocabulary of the documents relevant to the query and the portion of those documents in the corpus significantly helped BM25 to reach better performance. However, in practice such information is not available to the search engine to the extent we were able to provide using relevance judgements.
+
+We observed that stopping improves performance of both TF-IDF and Lucene base runs and this can be explained by the nature of this test collection - many queries are quite long and contain a lot of stop words.
+
+Query expansion, using pseudo-relevance feedback and inflectional variants, did improve the results as compared to the base run, but gave in to the run with simple stopping. This illustrates, on one hand, the effect of expansion with pseudo-relevance feedback that in the first place relies at results of the initial round of search. Expansion with inflectional variants, as we additionally checked, could gain more when combined with stopping, but still rich expansion adds noise to the results.
+
+The run with the stemmed corpus and queries is discussed in detailed in section 3.2, but its performance can't be equally compared to the other runs, since just a small subset of queries was used in it.
+
+These observations lead us to the following considerations about the future work.
+
+\subsection{Future work}
+
+To get the fuller picture in this study, we also should:
+\begin{itemize}
+\item build a search engine with language models approach (query likelihood ranking) to compare its performance with the other approaches
+\item apply auxiliary techniques (query expansion, stopping) to every base run and compare effectiveness (it is noted in the assignment that this is the approach taken in practice)
+\item both query expansion techniques used did not improve results that much, which brings us to the thought that other approaches (e.g. ontologies/thesauri as revealed in query-by-query analysis) and combination of approaches (inflectional expansion combined with stopping) should be tested as well
+\item observation of some queries shows that non-Lucene based engines require a more elaborate punctuation removal module (e.g. query about EL/1 language)
+\item we use unigram index without information about term proximity. However, terms are not really independent, so it looks like worth trying to incorporate that into the search process in some way (e.g. combined use of uni and bigram indexes, including term proximity information and respective analyzing functionality).
+\item we did not measure or tune the efficiency of the engines. If we are to add more processing steps, mentioned above, and prepare the most performant, in terms of effectiveness, engine for the real-world usage these metrics have to be gathered and tuned.
+\item from the UX point of view, it would be beneficial to add UI for query input and displaying results with highlighted snippets.
+\end{itemize}
+
+\newpage
+
+\begin{thebibliography}{99}
+
+\bibitem{1}  W. Bruce Croft, Donald Metzler, Trevor Strohman: Search Engines: Information Retrieval in Practice. Pearson Education, Inc., 2015
+
+\bibitem{2} https://lucene.apache.org/
+
+\bibitem{3}J.  Christopher D. Manning, Prabhakar Raghavan, Hinrich Schuetze: An Introduction to Information Retrieval. Cambridge University Press, 2009.
+
+\bibitem{4} http://stanfordnlp.github.io/CoreNLP/
+
+\bibitem{5} Jordan C., Watters C: Extending the Rocchio Relevance Feedback Algorithm to Provide Contextual Retrieval. Dalhousie University, Faculty of Computer Science.
+
+\bibitem{6} \url{https://lucene.apache.org/core/4_7_2/core/org/apache/lucene/search/similarities/TFIDFSimilarity.html}
+
+\bibitem{7} F. Sebastiani, Advances in Information Retrieval: 25th European Conference on IR Research, Volume 25, April, 2003.
+
+\end{thebibliography}
+
+\end{document}
